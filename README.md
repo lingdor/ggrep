@@ -56,4 +56,4 @@ output
 ```shell
 go install github.com/lingdor/ggrep@latest
 ```
-or download your release versions: [Releases]().
+or download your release versions: [Releases](https://github.com/lingdor/ggrep/releases).
