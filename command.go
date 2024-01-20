@@ -38,7 +38,10 @@ type command struct {
 	regexps       []*regexp.Regexp
 	groupRegex    *regexp.Regexp
 	outChan       chan string
+	cutLineSize   int
 }
+
+const DefaultCutLineSize = 102400
 
 func (c *command) verboseLogf(content string, args ...any) {
 	if c.verbose {
@@ -49,7 +52,7 @@ func (c *command) verboseLogf(content string, args ...any) {
 func (c *command) ready() {
 
 	flag.StringVar(&c.group, "group", "", "group match expression for regex")
-	flag.IntVar(&c.bufferLineMax, "buffer-line-max", 1000, "cache lines max size of buffers")
+	flag.IntVar(&c.bufferLineMax, "buffer-lines-max", 1000, "cache lines max size of buffers")
 	flag.IntVar(&c.bufferLineMax, "b", 1000, "cache lines max size of buffers(shorthand)")
 	flag.BoolVar(&c.mergeLine, "merge-lines", false, "merge output of matched lines")
 	flag.BoolVar(&c.mergeLine, "m", false, "merge output of matched lines(shorthand)")
@@ -57,6 +60,7 @@ func (c *command) ready() {
 	flag.IntVar(&c.concurrent, "concurrent", 1, "concurrent of analyse")
 	flag.StringVar(&c.file, "file", "", "input file path")
 	flag.StringVar(&c.file, "f", "", "input file path(shorthand)")
+	flag.IntVar(&c.cutLineSize, "cute-line-size", DefaultCutLineSize, fmt.Sprintf("line max size of a line, default:%d", DefaultCutLineSize))
 	c.errLog = log.New(os.Stderr, "[err]", log.Ldate|log.Ltime)
 }
 
@@ -100,16 +104,16 @@ func (c *command) run() {
 			}
 		}()
 		c.verboseLogf("opened file: %s", c.file)
-		reader = bufio.NewReader(file)
+		reader = bufio.NewReaderSize(file, c.cutLineSize)
 	} else {
 		file = os.Stdin
-		reader = bufio.NewReader(file)
+		reader = bufio.NewReaderSize(file, c.cutLineSize)
 		c.verboseLogf("stdin stream reading...")
 	}
 	util.CheckPanic(err)
 
 	exps := flag.Args()
-	c.buffLines = buffline.New(c.bufferLineMax, len(exps), !c.mergeLine)
+	c.buffLines = buffline.New(c.bufferLineMax, len(exps), !c.mergeLine, c.concurrent > 1)
 	c.inputbuf = make(chan string, 100)
 	c.outChan = make(chan string, 100)
 	ctx := context.Background()
@@ -124,6 +128,7 @@ func (c *command) run() {
 	for bs, exceed, err := reader.ReadLine(); err == nil; bs, exceed, err = reader.ReadLine() {
 		if exceed {
 			c.errLog.Println("a line too long, Cutted to multi-lines matching....")
+			c.verboseLogf("log:%s", string(bs))
 		}
 		c.inputbuf <- string(bs)
 	}
@@ -146,7 +151,6 @@ func (c *command) startScan(ctx context.Context, waitGroup *sync.WaitGroup, i in
 
 	for {
 		if line, ok := <-c.inputbuf; ok {
-
 			for i, reg := range c.regexps {
 				if reg.MatchString(line) {
 					indexes := c.groupRegex.FindStringIndex(line)
@@ -167,7 +171,11 @@ func (c *command) startScan(ctx context.Context, waitGroup *sync.WaitGroup, i in
 func (c *command) startPrint(ctx context.Context, finishedChan chan struct{}) {
 	for {
 		if line, ok := <-c.outChan; ok {
-			fmt.Println(line)
+			if _, err := fmt.Println(line); err == nil {
+				continue
+			} else {
+				os.Exit(0)
+			}
 		} else {
 			c.verboseLogf("output chan closted")
 			close(finishedChan)

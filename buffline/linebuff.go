@@ -27,17 +27,35 @@ type LineBuff struct {
 	isWrap     bool
 	bufSize    int
 	matchCount int
+	isSafe     bool
+}
+
+func (l *LineBuff) IsMatch(group string, index int) bool {
+
+	if l.isSafe {
+		l.Mutex.Lock()
+		defer l.Unlock()
+	}
+	if item, ok := l.lines[group]; ok {
+		return item.matches[index]
+	}
+	return false
 }
 
 func (l *LineBuff) Write(group string, line string, index int) ([]byte, bool) {
 	if l.matchCount == 1 {
 		return []byte(line), true
 	}
-	l.Mutex.Lock()
-	defer l.Unlock()
+	if l.isSafe {
+		l.Mutex.Lock()
+		defer l.Unlock()
+	}
 	var item *LineBuffItem
 	var ok bool
 	if item, ok = l.lines[group]; ok {
+		if item.matches[index] {
+			return nil, false
+		}
 		if l.isWrap {
 			item.buf.WriteString("\n")
 		}
@@ -70,7 +88,7 @@ func (l *LineBuff) Write(group string, line string, index int) ([]byte, bool) {
 	return nil, false
 }
 
-func New(buffSize, matchCount int, isWrap bool) *LineBuff {
+func New(buffSize, matchCount int, isWrap, isSafe bool) *LineBuff {
 	return &LineBuff{
 		lines:      make(map[string]*LineBuffItem, buffSize),
 		keys:       make([]string, 0, buffSize),
@@ -79,5 +97,6 @@ func New(buffSize, matchCount int, isWrap bool) *LineBuff {
 		isWrap:     isWrap,
 		bufSize:    buffSize,
 		matchCount: matchCount,
+		isSafe:     isSafe,
 	}
 }
