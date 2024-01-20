@@ -7,11 +7,17 @@ import (
 	"fmt"
 	"github.com/lingdor/ggrep/buffline"
 	"github.com/lingdor/ggrep/util"
+	"go.uber.org/automaxprocs/maxprocs"
 	"log"
 	"os"
 	"regexp"
+	"runtime"
 	"sync"
 )
+
+func init() {
+
+}
 
 const (
 	COLOR_NONE = "\033[0m"
@@ -75,13 +81,18 @@ func (c *command) validParameters() {
 }
 
 func (c *command) run() {
+	if c.concurrent < 1 {
+		maxprocs.Set(maxprocs.Logger(log.Printf))
+		c.concurrent = runtime.NumCPU()
+	} else {
+		runtime.GOMAXPROCS(c.concurrent)
+	}
 	c.validParameters()
 	c.verboseLogf("ggroup prepared, parameters:%+v", *c)
 	var reader *bufio.Reader
 	var file *os.File
 	var err error
 	if c.file != "" {
-
 		file, err = os.Open(c.file)
 		defer func() {
 			if file != nil {
@@ -92,6 +103,7 @@ func (c *command) run() {
 		reader = bufio.NewReader(file)
 	} else {
 		file = os.Stdin
+		reader = bufio.NewReader(file)
 		c.verboseLogf("stdin stream reading...")
 	}
 	util.CheckPanic(err)
@@ -111,7 +123,7 @@ func (c *command) run() {
 	go c.startPrint(ctx, finishedChan)
 	for bs, exceed, err := reader.ReadLine(); err == nil; bs, exceed, err = reader.ReadLine() {
 		if exceed {
-			println(c.errLog, "a line too long, Cutted to multi-lines matching....")
+			c.errLog.Println("a line too long, Cutted to multi-lines matching....")
 		}
 		c.inputbuf <- string(bs)
 	}
@@ -155,7 +167,7 @@ func (c *command) startScan(ctx context.Context, waitGroup *sync.WaitGroup, i in
 func (c *command) startPrint(ctx context.Context, finishedChan chan struct{}) {
 	for {
 		if line, ok := <-c.outChan; ok {
-			println(os.Stdout, line)
+			fmt.Println(line)
 		} else {
 			c.verboseLogf("output chan closted")
 			close(finishedChan)
