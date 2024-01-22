@@ -1,9 +1,10 @@
 # ggrep
 a command-line tool for text search, sepcially for logid searching. you can use logid group the muliti-lines merge to a one record.
 # demo
-merge multi-lines to a line for logid:
+seek multi condition for log scanning:
+
 ```shell
-ggrep --group 'logid[\w+]' 'LOG1' 'LOG2' --buff-line 200 --merge-lines
+ggrep --group 'LogId\[[:logid:]\]' --grep 'LOG1' --grep 'LOG2' --match-orderly  demo/demo.log
 ```
 
 log-content:
@@ -11,23 +12,18 @@ log-content:
 20240119 LogId[111] LOG1
 20240119 LogId[111] LOG2
 20240119 LogId[111] LOG3
-20240119 LogId[111] LOG4
-20240119 LogId[111] LOG5
 50240119 LogId[222] LOG1
-20240119 LogId[222] LOG2
-20240119 LogId[222] LOG3
-20240119 LogId[222] LOG4
-20240119 LogId[222] LOG5
+
 ```
 output
 ```text
-20240119 LogId[111] LOG220240119 LogId[111] LOG5
-20240119 LogId[222] LOG220240119 LogId[222] LOG5
+20240119 LogId[111] LOG120240119 LogId[111] LOG2
+50240119 LogId[222] LOG1
 ```
 
-seek multi condition for log scanning
+merge multi-lines to a line for logid
 ```shell
-ggrep --group 'logid[\w+]' 'LOG1' 'LOG2' --buff-line 200
+cat demo/ ggrep --group 'logId\[\w+\]' --grep 'log1' --grep 'log2' --merge-lines demo/demo.log
 ```
 
 log-content:
@@ -35,24 +31,23 @@ log-content:
 20240119 LogId[111] LOG1
 20240119 LogId[111] LOG2
 20240119 LogId[111] LOG3
-20240119 LogId[111] LOG4
-20240119 LogId[111] LOG5
 50240119 LogId[222] LOG1
-20240119 LogId[222] LOG2
-20240119 LogId[222] LOG3
-20240119 LogId[222] LOG4
-20240119 LogId[222] LOG5
+
 ```
 output
 ```text
-20240119 LogId[111] LOG2
-20240119 LogId[111] LOG5
-20240119 LogId[222] LOG2
-20240119 LogId[222] LOG5
+20240119 LogId[111] LOG120240119 LogId[111] LOG2
+50240119 LogId[222] LOG1
 ```
 
 # install
+```shell
 
+curl /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+```
+
+or
 ```shell
 go install github.com/lingdor/ggrep@latest
 ```
