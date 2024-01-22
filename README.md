@@ -49,7 +49,7 @@ cat demo/demo.log|./ggrep  --group 'LogId\[[:logid:]\]' --color=always|head
 # install
 ```shell
 
-curl /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/lingdor/ggrep/HEAD/install.sh)"
 
 ```
 
