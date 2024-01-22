@@ -4,7 +4,7 @@ a command-line tool for text search, sepcially for logid searching. you can use 
 seek multi condition for log scanning:
 
 ```shell
-ggrep --group 'LogId\[[:logid:]\]' --grep 'LOG1' --grep 'LOG2' --match-orderly  demo/demo.log
+ggrep --group 'LogId\[[:logid:]\]' --grep 'LOG1' --grep 'LOG2' --orderly-match  demo/demo.log
 ```
 
 log-content:
@@ -42,7 +42,7 @@ output
 test group match
 
 ```shell
-cat demo/demo.log|./ggrep  --group 'LogId\[[:logid:]\]' --color=always|head
+cat demo/demo.log|ggrep  --group 'LogId\[[:logid:]\]' --color=always|head
 ```
 
 

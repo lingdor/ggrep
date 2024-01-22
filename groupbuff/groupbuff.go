@@ -27,7 +27,7 @@ func (l *GroupBuff) String() string {
 	return l.buf.String()
 }
 
-func (l *GroupBuff) Write(line string, matchindex, matchsize int, mergeLines bool) ([]byte, bool) {
+func (l *GroupBuff) Write(line string, matchindex, matchsize uint, mergeLines bool) ([]byte, bool) {
 
 	if !mergeLines && l.matchindex > 0 {
 		l.buf.WriteString("\n")
@@ -35,12 +35,12 @@ func (l *GroupBuff) Write(line string, matchindex, matchsize int, mergeLines boo
 	l.buf.WriteString(line)
 	if l.orderly {
 		l.matchindex++
-		if l.matchindex >= uint(matchsize) {
+		if l.matchindex >= matchsize {
 			return l.buf.Bytes(), true
 		}
 	} else {
-		full := util.FullIntBinary(matchsize)
-		l.matchindex = util.SetTrue(l.matchindex, matchindex)
+		full := util.FullIntBinary(int(matchsize))
+		l.matchindex = util.SetTrue(l.matchindex, int(matchindex))
 		if l.matchindex == full {
 			return l.buf.Bytes(), true
 		}

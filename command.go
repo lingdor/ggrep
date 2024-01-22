@@ -68,8 +68,10 @@ func (c *command) ready() {
 		c.greps = append(c.greps, v)
 		return nil
 	})
-	flag.BoolVar(&c.orderlyMatch, "match-orderly", false, "if true, result must for grep declared sequence")
+	flag.BoolVar(&c.orderlyMatch, "orderly-match", false, "if true, result must for grep declared sequence")
+	flag.BoolVar(&c.orderlyMatch, "O", false, "if true, result must for grep declared sequence")
 	flag.BoolVar(&c.fullMatch, "full-match", false, "Only output checked all grep expression in group, will be output")
+	flag.BoolVar(&c.fullMatch, "F", false, "Only output checked all grep expression in group, will be output")
 	//support auto todo
 	flag.StringVar(&c.color, "color", "", "will highlight the matched word when you set always")
 	//todo
@@ -290,7 +292,8 @@ func (c *command) startMatchWorker(ctx context.Context, waitGroup *sync.WaitGrou
 					groupItem = groupbuff.NewItem(goIndex, c.orderlyMatch, false)
 					wokerCycleMaps.Set(group, groupItem)
 				}
-				if bs, finished := groupItem.Write(line, 0, len(c.regexps), c.mergeLine); finished {
+
+				if bs, finished := groupItem.Write(line, matchIndex, uint(len(c.regexps)), c.mergeLine); finished {
 					wokerCycleMaps.Remove(group)
 					c.outChan <- string(bs)
 				}
