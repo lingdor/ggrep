@@ -23,7 +23,7 @@ output
 
 merge multi-lines to a line for logid
 ```shell
-cat demo/ ggrep --group 'logId\[\w+\]' --grep 'log1' --grep 'log2' --merge-lines demo/demo.log
+cat demo/demo.log|ggrep  --group 'LogId\[[:logid:]\]' --grep 'LOG1' --grep 'LOG2' --merge-lines  --color=always
 ```
 
 log-content:
@@ -39,6 +39,12 @@ output
 20240119 LogId[111] LOG120240119 LogId[111] LOG2
 50240119 LogId[222] LOG1
 ```
+test group match
+
+```shell
+cat demo/demo.log|./ggrep  --group 'LogId\[[:logid:]\]' --color=always|head
+```
+
 
 # install
 ```shell

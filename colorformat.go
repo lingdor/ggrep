@@ -14,6 +14,9 @@ type ColorFormatFunc func(line string, indexes []int) string
 
 func GrepColorRedFormat(line string, indexes []int) string {
 	if len(indexes) > 1 {
+		if indexes[0] == indexes[1] {
+			return line
+		}
 		buff := &bytes.Buffer{}
 		buff.WriteString(line[0:indexes[0]])
 		buff.WriteString(COLOR_RED)

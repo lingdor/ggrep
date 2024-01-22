@@ -86,13 +86,13 @@ func (c *command) valid() error {
 			return fmt.Errorf("grep command parameters max of %d", grepMax)
 		}
 	}
+	if l < 1 {
+		c.parallelCnt = 1
+	}
 	if c.verbose {
 		c.errLog = log.New(os.Stderr, "[err]", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
 	} else {
 		c.errLog = log.New(os.Stderr, "[err]", log.Lmsgprefix)
-	}
-	if len(c.greps) < 1 {
-		return fmt.Errorf("no found match expression in parameters")
 	}
 	if c.group == "" {
 		return errors.New("no found parameter: group")
@@ -134,11 +134,15 @@ func (c *command) run() {
 	ctx := context.Background()
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(c.parallelCnt)
-	c.verboseLogf("prepared finished")
-	for i := 0; i < c.parallelCnt; i++ {
-		c.workerChans[i] = make(chan *inputdata, 100)
-		go c.startMatchWorker(ctx, waitGroup, i)
-
+	c.verboseLogf("waitgroup count:%d", c.parallelCnt)
+	if len(c.greps) > 0 {
+		for i := 0; i < c.parallelCnt; i++ {
+			c.workerChans[i] = make(chan *inputdata, 100)
+			go c.startMatchWorker(ctx, waitGroup, i)
+		}
+	} else {
+		c.workerChans[0] = make(chan *inputdata, 100)
+		go c.startDirectWorker(ctx, waitGroup, 0)
 	}
 	var finishedChan = make(chan struct{})
 	go c.startPrint(ctx, finishedChan)
@@ -224,9 +228,26 @@ func (c *command) CheckGrepMatch(ctx context.Context, matchIndex uint, line stri
 			}
 		}
 	}
+	if len(c.regexps) < 1 {
+		return []int{0, 0}
+	}
 	c.errLog.Println("unknow error #202401222101")
 	os.Exit(1)
 	return nil
+}
+
+func (c *command) startDirectWorker(ctx context.Context, waitGroup *sync.WaitGroup, goIndex int) {
+	defer func() {
+		waitGroup.Done()
+	}()
+	for {
+		if lineInfo, ok := <-c.workerChans[goIndex]; ok {
+			c.outChan <- lineInfo.line
+		} else {
+			c.verboseLogf("directWorker end")
+			break
+		}
+	}
 }
 
 func (c *command) startMatchWorker(ctx context.Context, waitGroup *sync.WaitGroup, goIndex int) {
