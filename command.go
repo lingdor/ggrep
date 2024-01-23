@@ -42,11 +42,12 @@ type command struct {
 	orderlyMatch   bool
 	fullMatch      bool
 	recursive      bool
+	ignoreCase     bool
 	lineIndex      int
 	color          string
 }
 
-const DefaultCutLineSize = 102400
+const DefaultCutLineSize = 1024 * 1024 * 5
 
 func (c *command) verboseLogf(content string, args ...any) {
 	if c.verbose {
@@ -71,6 +72,7 @@ func (c *command) ready() {
 	flag.BoolVar(&c.orderlyMatch, "orderly-match", false, "if true, result must for grep declared sequence")
 	flag.BoolVar(&c.orderlyMatch, "O", false, "if true, result must for grep declared sequence")
 	flag.BoolVar(&c.fullMatch, "full-match", false, "Only output checked all grep expression in group, will be output")
+	flag.BoolVar(&c.ignoreCase, "i", false, "ignore case in match")
 	flag.BoolVar(&c.fullMatch, "F", false, "Only output checked all grep expression in group, will be output")
 	//support auto todo
 	flag.StringVar(&c.color, "color", "", "will highlight the matched word when you set always")
@@ -113,6 +115,9 @@ func (c *command) valid() error {
 	return nil
 }
 func (c *command) ggrepRegex(exp string) (*regexp.Regexp, error) {
+	if c.ignoreCase {
+		exp = "(?i)" + exp
+	}
 	exp = strings.ReplaceAll(exp, "[:logid:]", "[0-9a-zA-z_\\-]+")
 	return regexp.CompilePOSIX(exp)
 }
