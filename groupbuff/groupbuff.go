@@ -2,63 +2,52 @@ package groupbuff
 
 import (
 	"bytes"
-	"github.com/lingdor/ggrep/util"
-	"sync"
 )
 
 type GroupBuff struct {
-	buf        *bytes.Buffer
-	matchsize  int
-	matchindex uint
-	goIndex    int
-	orderly    bool
-	*sync.Mutex
-}
-
-func (l *GroupBuff) GoIndex() int {
-	return l.goIndex
+	buf         *bytes.Buffer
+	matchindex  uint
+	fullMatched bool
 }
 
 func (l *GroupBuff) MatchIndex() uint {
 	return l.matchindex
+}
+func (l *GroupBuff) SetIndex(v uint) {
+	l.matchindex = v
+}
+func (l *GroupBuff) Increment() {
+	l.matchindex++
+}
+func (l *GroupBuff) SetFullMatched(v bool) {
+	l.fullMatched = v
+}
+func (l *GroupBuff) FullMatched() bool {
+	return l.fullMatched
 }
 
 func (l *GroupBuff) String() string {
 	return l.buf.String()
 }
 
-func (l *GroupBuff) Write(line string, matchindex, matchsize uint, mergeLines bool) ([]byte, bool) {
-
-	if !mergeLines && l.matchindex > 0 {
-		l.buf.WriteString("\n")
+func (l *GroupBuff) Write(bs []byte, mergeLine bool) {
+	if !mergeLine && l.buf.Len() > 0 {
+		l.buf.Write([]byte{'\n'})
 	}
-	l.buf.WriteString(line)
-	if l.orderly {
-		l.matchindex++
-		if l.matchindex >= matchsize {
-			return l.buf.Bytes(), true
-		}
-	} else {
-		full := util.FullIntBinary(int(matchsize))
-		l.matchindex = util.SetTrue(l.matchindex, int(matchindex))
-		if l.matchindex == full {
-			return l.buf.Bytes(), true
-		}
-	}
-
-	return nil, false
+	l.buf.Write(bs)
 }
 
-func NewItem(goIndex int, orderly bool, isSafe bool) *GroupBuff {
+func (l *GroupBuff) Len() int {
+	return l.buf.Len()
+}
+
+func NewItem() *GroupBuff {
 
 	ret := &GroupBuff{
-		buf:        &bytes.Buffer{},
-		matchindex: 0,
-		goIndex:    goIndex,
-		orderly:    orderly,
+		buf:         &bytes.Buffer{},
+		matchindex:  0,
+		fullMatched: false,
 	}
-	if isSafe {
-		ret.Mutex = &sync.Mutex{}
-	}
+
 	return ret
 }
