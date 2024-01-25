@@ -45,6 +45,18 @@ test group match
 cat demo/demo.log|ggrep  --group 'LogId\[[:logid:]\]' --color=always|head
 ```
 
+# Print full group of log
+
+```shell
+ggrep --smart-logid --print-group --grep 'LOG2' --full-match --color always  demo/demo.log
+```
+output:
+```text
+20240119 LogId[111] LOG1
+20240119 LogId[111] LOG2
+20240119 LogId[111] LOG3
+```
+
 
 # install
 ```shell

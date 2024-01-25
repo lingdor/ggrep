@@ -43,8 +43,12 @@ type command struct {
 	fullMatch      bool
 	recursive      bool
 	ignoreCase     bool
+	printGroup     bool
+	smartLogId     bool
 	lineIndex      int
+	perlModel      bool
 	color          string
+	colorFormat    ColorFormatFunc
 }
 
 const DefaultCutLineSize = 1024 * 1024 * 5
@@ -74,6 +78,10 @@ func (c *command) ready() {
 	flag.BoolVar(&c.fullMatch, "full-match", false, "Only output checked all grep expression in group, will be output")
 	flag.BoolVar(&c.ignoreCase, "i", false, "ignore case in match")
 	flag.BoolVar(&c.fullMatch, "F", false, "Only output checked all grep expression in group, will be output")
+	flag.BoolVar(&c.printGroup, "print-group", false, "print full content of group")
+	flag.BoolVar(&c.smartLogId, "smart-logid", false, "identify LogId in log content automatically")
+	flag.BoolVar(&c.perlModel, "perl", false, "as close to Perl as possible")
+	flag.BoolVar(&c.perlModel, "P", false, "as close to Perl as possible")
 	//support auto todo
 	flag.StringVar(&c.color, "color", "", "will highlight the matched word when you set always")
 	//todo
@@ -98,28 +106,40 @@ func (c *command) valid() error {
 	} else {
 		c.errLog = log.New(os.Stderr, "[err]", log.Lmsgprefix)
 	}
-	if c.group == "" {
+	if c.smartLogId {
+		c.groupRegex = regexp.MustCompile("(?i)logid[^a-z0-9_-]+[0-9a-z_-]+")
+	}
+	if c.group == "" && !c.smartLogId {
 		return errors.New("no found parameter: group")
 	}
 	c.regexps = make([]*regexp.Regexp, len(c.greps))
 	var err error
-	if c.groupRegex, err = c.ggrepRegex(c.group); err == nil {
-		for i, grep := range c.greps {
-			if c.regexps[i], err = c.ggrepRegex(grep); err != nil {
-				return fmt.Errorf("grep (%s) expression mistake:%w", grep, err)
-			}
+	for i, grep := range c.greps {
+		if c.regexps[i], err = c.ggrepRegex(grep); err != nil {
+			return fmt.Errorf("grep (%s) expression mistake:%w", grep, err)
 		}
-	} else {
-		return fmt.Errorf("group expression mistake:%w", err)
+	}
+	if !c.smartLogId {
+		var err error
+		c.groupRegex, err = regexp.CompilePOSIX(c.group)
+		util.CheckPanic(err)
 	}
 	return nil
 }
 func (c *command) ggrepRegex(exp string) (*regexp.Regexp, error) {
-	if c.ignoreCase {
-		exp = "(?i)" + exp
+	if c.perlModel {
+		if c.ignoreCase {
+			exp = "(?i)" + exp
+		}
+		exp = strings.ReplaceAll(exp, "[[:logid:]]", "[0-9a-zA-z_\\-]+")
+		return regexp.Compile(exp)
 	}
-	exp = strings.ReplaceAll(exp, "[:logid:]", "[0-9a-zA-z_\\-]+")
+	exp = strings.ReplaceAll(exp, "[[:logid:]]", "[0-9a-zA-z_\\-]+")
+	if c.ignoreCase {
+		exp = strings.ToLower(exp)
+	}
 	return regexp.CompilePOSIX(exp)
+
 }
 
 func (c *command) run() {
@@ -134,6 +154,9 @@ func (c *command) run() {
 		runtime.GOMAXPROCS(c.parallelCnt)
 	}
 	start := time.Now()
+	if c.color == "always" {
+		c.colorFormat = GrepColorRedFormat
+	}
 	c.verboseLogf("ggroup prepared, parameters:%+v", *c)
 	c.groupWorkers = cyclemap.New[string, int](c.cacheGroupSize, false)
 	c.outChan = make(chan string, 100)
@@ -142,14 +165,9 @@ func (c *command) run() {
 	waitGroup := &sync.WaitGroup{}
 	waitGroup.Add(c.parallelCnt)
 	c.verboseLogf("waitgroup count:%d", c.parallelCnt)
-	if len(c.greps) > 0 {
-		for i := 0; i < c.parallelCnt; i++ {
-			c.workerChans[i] = make(chan *inputdata, 100)
-			go c.startMatchWorker(ctx, waitGroup, i)
-		}
-	} else {
-		c.workerChans[0] = make(chan *inputdata, 100)
-		go c.startDirectWorker(ctx, waitGroup, 0)
+	for i := 0; i < c.parallelCnt; i++ {
+		c.workerChans[i] = make(chan *inputdata, 100)
+		go c.startMatchWorker(ctx, waitGroup, i)
 	}
 	var finishedChan = make(chan struct{})
 	go c.startPrint(ctx, finishedChan)
@@ -201,7 +219,8 @@ func (c *command) readFile(ctx context.Context, fi int) {
 			c.verboseLogf("log:%s", string(bs))
 		}
 		line := string(bs)
-		groupIndexes := c.groupRegex.FindStringIndex(line)
+		var groupIndexes []int
+		groupIndexes = c.groupRegex.FindStringIndex(line)
 		if len(groupIndexes) > 1 {
 			group := line[groupIndexes[0]:groupIndexes[1]]
 			if groupColorFormat != nil {
@@ -220,89 +239,38 @@ func (c *command) readFile(ctx context.Context, fi int) {
 	}
 }
 
-func (c *command) CheckGrepMatch(ctx context.Context, matchIndex uint, line string) []int {
-
-	if c.orderlyMatch {
-		if int(matchIndex) < len(c.regexps) {
-			reg := c.regexps[matchIndex]
-			return reg.FindStringIndex(line)
-		}
-	} else {
-		for i := 0; i < len(c.regexps); i++ {
-			if !util.IsTrue(matchIndex, i) {
-				reg := c.regexps[i]
-				return reg.FindStringIndex(line)
-			}
-		}
-	}
-	if len(c.regexps) < 1 {
-		return []int{0, 0}
-	}
-	c.errLog.Println("unknow error #202401222101")
-	os.Exit(1)
-	return nil
-}
-
-func (c *command) startDirectWorker(ctx context.Context, waitGroup *sync.WaitGroup, goIndex int) {
-	defer func() {
-		waitGroup.Done()
-	}()
-	for {
-		if lineInfo, ok := <-c.workerChans[goIndex]; ok {
-			c.outChan <- lineInfo.line
-		} else {
-			c.verboseLogf("directWorker end")
-			break
-		}
-	}
-}
-
 func (c *command) startMatchWorker(ctx context.Context, waitGroup *sync.WaitGroup, goIndex int) {
 	c.verboseLogf("orderly scan worker %d started", goIndex)
-	var colorFormat ColorFormatFunc
-	if c.color == "always" {
-		colorFormat = GrepColorRedFormat
-	}
+
 	var wokerCycleMaps = cyclemap.New[string, *groupbuff.GroupBuff](c.cacheGroupSize/c.parallelCnt, false)
-	if !c.fullMatch {
-		wokerCycleMaps.SetListenRemoveFunc(func(group string, item *groupbuff.GroupBuff) {
+	wokerCycleMaps.SetListenRemoveFunc(func(group string, item *groupbuff.GroupBuff) {
+		if (!c.fullMatch && item.MatchIndex() > 0) || item.FullMatched() {
 			c.outChan <- item.String()
-		})
-	}
+		}
+	})
 	defer func() {
 		if !c.fullMatch {
 			iter := wokerCycleMaps.Iter()
 			for item, ok := iter.First(); ok; item, ok = iter.Next() {
-				c.outChan <- item.String()
+				if (!c.fullMatch && item.MatchIndex() > 0) || item.FullMatched() {
+					c.outChan <- item.String()
+				}
 			}
 		}
 		waitGroup.Done()
 		c.verboseLogf("orderly scan worker %d finished", goIndex)
 	}()
+	var outFunc matchFunc
+	if len(c.greps) == 0 {
+		outFunc = matchDirectOut
+	} else if c.orderlyMatch {
+		outFunc = matchOrderlyOut
+	} else {
+		outFunc = matchUnOrderlyOut
+	}
 	for {
 		if lineInfo, ok := <-c.workerChans[goIndex]; ok {
-			line := lineInfo.line
-			group := lineInfo.group
-			groupItem, existsGroup := wokerCycleMaps.Get(group)
-
-			var matchIndex uint = 0
-			if existsGroup {
-				matchIndex = groupItem.MatchIndex()
-			}
-			if indexes := c.CheckGrepMatch(ctx, matchIndex, line); len(indexes) > 1 {
-				if colorFormat != nil {
-					line = colorFormat(line, indexes)
-				}
-				if !existsGroup {
-					groupItem = groupbuff.NewItem(goIndex, c.orderlyMatch, false)
-					wokerCycleMaps.Set(group, groupItem)
-				}
-
-				if bs, finished := groupItem.Write(line, matchIndex, uint(len(c.regexps)), c.mergeLine); finished {
-					wokerCycleMaps.Remove(group)
-					c.outChan <- string(bs)
-				}
-			}
+			outFunc(c, lineInfo, wokerCycleMaps)
 		} else {
 			c.verboseLogf("worker %d canceled", goIndex)
 			break
